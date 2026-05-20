@@ -1,0 +1,12 @@
+============================================================
+  KMEANS CLUSTERING – SOIL SEGMENTATION METRICS
+============================================================
+
+  Number of Clusters : 5
+  Silhouette Score   : 0.2926
+
+  Interpretation:
+    0.71–1.00  → Strong cluster structure
+    0.51–0.70  → Reasonable structure
+    0.26–0.50  → Weak structure
+    < 0.25    → No substantial structure

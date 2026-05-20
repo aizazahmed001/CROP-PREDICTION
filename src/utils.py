@@ -1,170 +1,177 @@
 """
-Utility functions for the Smart Agriculture Decision Support System
+utils.py
+--------
+Shared utilities: metric computation, plot generation, file I/O helpers.
+All plots are saved to /results and returned as Figure objects for GUI embedding.
 """
 
 import os
-import joblib
 import numpy as np
-import pandas as pd
-from datetime import datetime
+import matplotlib
+matplotlib.use("Agg")           # non-interactive backend for headless saving
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+
+from sklearn.metrics import (
+    accuracy_score, precision_score, recall_score,
+    f1_score, classification_report,
+    mean_squared_error, mean_absolute_error, r2_score,
+    silhouette_score
+)
+
+BASE_DIR    = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+RESULTS_DIR = os.path.join(BASE_DIR, "results")
+os.makedirs(RESULTS_DIR, exist_ok=True)
 
 
-def create_directory_structure():
-    """Create required project directories if they don't exist"""
-    directories = ['data', 'models', 'results', 'src']
-    for directory in directories:
-        os.makedirs(directory, exist_ok=True)
-    print("[INFO] Directory structure verified.")
+# ── Classification Metrics ────────────────────────────────────────────────────
+def evaluate_classifier(y_true, y_pred, label_names=None):
+    """Compute and return classification metrics as a dict."""
+    metrics = {
+        "accuracy":  accuracy_score(y_true, y_pred),
+        "precision": precision_score(y_true, y_pred, average="weighted", zero_division=0),
+        "recall":    recall_score(y_true, y_pred, average="weighted", zero_division=0),
+        "f1":        f1_score(y_true, y_pred, average="weighted", zero_division=0),
+    }
+    report = classification_report(y_true, y_pred, target_names=label_names, zero_division=0)
+    return metrics, report
 
 
-def save_model(model, filename, directory='models'):
-    """
-    Save trained model to disk
-    
-    Args:
-        model: Trained sklearn model
-        filename: Name of the file (without extension)
-        directory: Directory to save model
-    """
-    filepath = os.path.join(directory, f"{filename}.pkl")
-    joblib.dump(model, filepath)
-    print(f"[SUCCESS] Model saved: {filepath}")
+# ── Regression Metrics ────────────────────────────────────────────────────────
+def evaluate_regression(y_true, y_pred):
+    """Compute and return regression metrics as a dict."""
+    rmse = np.sqrt(mean_squared_error(y_true, y_pred))
+    mae  = mean_absolute_error(y_true, y_pred)
+    r2   = r2_score(y_true, y_pred)
+    return {"RMSE": rmse, "MAE": mae, "R2": r2}
 
 
-def load_model(filename, directory='models'):
-    """
-    Load trained model from disk
-    
-    Args:
-        filename: Name of the file (without extension)
-        directory: Directory containing models
-    
-    Returns:
-        Loaded model object
-    """
-    filepath = os.path.join(directory, f"{filename}.pkl")
-    if not os.path.exists(filepath):
-        raise FileNotFoundError(f"Model not found: {filepath}")
-    model = joblib.load(filepath)
-    print(f"[SUCCESS] Model loaded: {filepath}")
-    return model
+# ── Clustering Metrics ────────────────────────────────────────────────────────
+def evaluate_clustering(X, labels):
+    """Return silhouette score for cluster quality."""
+    score = silhouette_score(X, labels)
+    return {"silhouette_score": score}
 
 
-def log_metrics(metrics_dict, filename, directory='results'):
-    """
-    Save evaluation metrics to text file with timestamp
-    
-    Args:
-        metrics_dict: Dictionary containing metric names and values
-        filename: Name of the output file
-        directory: Directory to save results
-    """
-    filepath = os.path.join(directory, filename)
-    with open(filepath, 'w') as f:
-        f.write(f"Smart Agriculture AI System - Model Evaluation\n")
-        f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        f.write("="*60 + "\n\n")
-        for metric_name, metric_value in metrics_dict.items():
-            f.write(f"{metric_name}: {metric_value:.4f}\n")
-    print(f"[SUCCESS] Metrics saved: {filepath}")
+# ── Plot: Feature Importance ──────────────────────────────────────────────────
+def plot_feature_importance(importances, feature_names, save=True):
+    """Bar chart of Decision Tree feature importances."""
+    idx    = np.argsort(importances)[::-1]
+    sorted_names  = [feature_names[i] for i in idx]
+    sorted_values = importances[idx]
 
+    colors = plt.cm.YlGn(np.linspace(0.4, 0.9, len(sorted_names)))
 
-def generate_synthetic_dataset(num_samples=1000, save=True):
-    """
-    Generate realistic synthetic agricultural dataset
-    
-    Args:
-        num_samples: Number of data points to generate
-        save: Whether to save dataset to CSV
-    
-    Returns:
-        DataFrame containing synthetic agricultural data
-    """
-    np.random.seed(42)
-    
-    # Generate environmental features
-    temperature = np.random.normal(25, 5, num_samples)  # Celsius
-    humidity = np.random.normal(70, 15, num_samples)    # Percentage
-    rainfall = np.random.gamma(2, 50, num_samples)      # mm
-    soil_ph = np.random.normal(6.5, 0.8, num_samples)   # pH scale
-    
-    # Soil nutrients
-    nitrogen = np.random.normal(140, 40, num_samples)   # kg/ha
-    phosphorus = np.random.normal(40, 20, num_samples)   # kg/ha
-    potassium = np.random.normal(200, 50, num_samples)   # kg/ha
-    
-    # Soil moisture
-    moisture = np.random.normal(35, 10, num_samples)     # Percentage
-    
-    # Generate crop labels based on environmental conditions
-    crop_labels = []
-    crop_yields = []
-    
-    for i in range(num_samples):
-        # Decision logic for crop recommendation
-        if temperature[i] > 28 and rainfall[i] > 100:
-            crop = 'Rice'
-            base_yield = 4000
-        elif temperature[i] > 22 and soil_ph[i] > 6.0 and nitrogen[i] > 120:
-            crop = 'Wheat'
-            base_yield = 3500
-        elif temperature[i] < 20 and rainfall[i] < 80:
-            crop = 'Barley'
-            base_yield = 3000
-        elif soil_ph[i] > 7.0 and temperature[i] > 25:
-            crop = 'Cotton'
-            base_yield = 2500
-        elif phosphorus[i] > 50 and potassium[i] > 220:
-            crop = 'Sugarcane'
-            base_yield = 70000
-        elif nitrogen[i] > 160 and moisture[i] > 40:
-            crop = 'Maize'
-            base_yield = 6000
-        else:
-            crop = 'Soybean'
-            base_yield = 2800
-        
-        crop_labels.append(crop)
-        
-        # Generate yield with noise
-        yield_value = base_yield + np.random.normal(0, base_yield * 0.1)
-        crop_yields.append(max(0, yield_value))
-    
-    # Create DataFrame
-    df = pd.DataFrame({
-        'Temperature': temperature,
-        'Humidity': humidity,
-        'Rainfall': rainfall,
-        'Soil_pH': soil_ph,
-        'Nitrogen': nitrogen,
-        'Phosphorus': phosphorus,
-        'Potassium': potassium,
-        'Moisture': moisture,
-        'Crop_Label': crop_labels,
-        'Crop_Yield': crop_yields
-    })
-    
-    # Clip values to realistic ranges
-    df['Temperature'] = df['Temperature'].clip(0, 50)
-    df['Humidity'] = df['Humidity'].clip(0, 100)
-    df['Rainfall'] = df['Rainfall'].clip(0, 500)
-    df['Soil_pH'] = df['Soil_pH'].clip(3, 10)
-    df['Nitrogen'] = df['Nitrogen'].clip(0, 300)
-    df['Phosphorus'] = df['Phosphorus'].clip(0, 100)
-    df['Potassium'] = df['Potassium'].clip(0, 400)
-    df['Moisture'] = df['Moisture'].clip(0, 100)
-    
+    fig, ax = plt.subplots(figsize=(8, 5))
+    bars = ax.barh(sorted_names[::-1], sorted_values[::-1], color=colors[::-1])
+    ax.set_xlabel("Importance Score", fontsize=11)
+    ax.set_title("Decision Tree – Feature Importance", fontsize=13, fontweight="bold")
+    ax.set_xlim(0, max(sorted_values) * 1.15)
+
+    for bar, val in zip(bars, sorted_values[::-1]):
+        ax.text(val + 0.001, bar.get_y() + bar.get_height() / 2,
+                f"{val:.4f}", va="center", fontsize=9)
+
+    fig.tight_layout()
     if save:
-        os.makedirs('data', exist_ok=True)
-        df.to_csv('data/agricultural_data.csv', index=False)
-        print(f"[SUCCESS] Synthetic dataset generated with {num_samples} samples")
-    
-    return df
+        path = os.path.join(RESULTS_DIR, "feature_importance.png")
+        fig.savefig(path, dpi=150, bbox_inches="tight")
+        print(f"[Utils] Saved: {path}")
+    return fig
 
 
-if __name__ == "__main__":
-    # Test utility functions
-    create_directory_structure()
-    df = generate_synthetic_dataset(100)
-    print(df.head())
-    print(df.describe())
+# ── Plot: Cluster Scatter ─────────────────────────────────────────────────────
+def plot_clusters(X_pca, labels, n_clusters, save=True):
+    """2-D PCA scatter plot coloured by cluster label."""
+    cmap   = plt.cm.get_cmap("Set2", n_clusters)
+    fig, ax = plt.subplots(figsize=(7, 5))
+
+    for k in range(n_clusters):
+        mask = labels == k
+        ax.scatter(X_pca[mask, 0], X_pca[mask, 1],
+                   s=18, alpha=0.7, color=cmap(k), label=f"Soil Zone {k+1}")
+
+    ax.set_xlabel("PCA Component 1", fontsize=11)
+    ax.set_ylabel("PCA Component 2", fontsize=11)
+    ax.set_title("KMeans Clustering – Soil Segmentation (PCA)", fontsize=13, fontweight="bold")
+    ax.legend(loc="best", fontsize=9, markerscale=1.5)
+    fig.tight_layout()
+
+    if save:
+        path = os.path.join(RESULTS_DIR, "cluster_plot.png")
+        fig.savefig(path, dpi=150, bbox_inches="tight")
+        print(f"[Utils] Saved: {path}")
+    return fig
+
+
+# ── Plot: Regression Residuals ────────────────────────────────────────────────
+def plot_residuals(y_true, y_pred, save=True):
+    """Residual scatter plot with zero-line and histogram."""
+    residuals = y_true - y_pred
+
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4))
+
+    # Scatter: predicted vs residual
+    axes[0].scatter(y_pred, residuals, alpha=0.4, s=12, color="#2E86AB")
+    axes[0].axhline(0, color="#E84855", linewidth=1.5, linestyle="--")
+    axes[0].set_xlabel("Predicted Yield (kg/ha)", fontsize=11)
+    axes[0].set_ylabel("Residual", fontsize=11)
+    axes[0].set_title("Residual Plot", fontsize=12, fontweight="bold")
+
+    # Histogram of residuals
+    axes[1].hist(residuals, bins=30, color="#3BB273", edgecolor="white", alpha=0.85)
+    axes[1].axvline(0, color="#E84855", linewidth=1.5, linestyle="--")
+    axes[1].set_xlabel("Residual Value", fontsize=11)
+    axes[1].set_ylabel("Frequency", fontsize=11)
+    axes[1].set_title("Residual Distribution", fontsize=12, fontweight="bold")
+
+    fig.tight_layout()
+    if save:
+        path = os.path.join(RESULTS_DIR, "residual_plot.png")
+        fig.savefig(path, dpi=150, bbox_inches="tight")
+        print(f"[Utils] Saved: {path}")
+    return fig
+
+
+# ── Text report savers ────────────────────────────────────────────────────────
+def save_accuracy_report(metrics, report_text, label_names):
+    path = os.path.join(RESULTS_DIR, "accuracy_report.txt")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("=" * 60 + "\n")
+        f.write("  DECISION TREE CLASSIFIER – ACCURACY REPORT\n")
+        f.write("=" * 60 + "\n\n")
+        f.write(f"  Accuracy  : {metrics['accuracy']:.4f}\n")
+        f.write(f"  Precision : {metrics['precision']:.4f}\n")
+        f.write(f"  Recall    : {metrics['recall']:.4f}\n")
+        f.write(f"  F1-Score  : {metrics['f1']:.4f}\n\n")
+        f.write("Per-Class Report:\n")
+        f.write(report_text)
+    print(f"[Utils] Saved: {path}")
+
+
+def save_regression_metrics(metrics):
+    path = os.path.join(RESULTS_DIR, "regression_metrics.txt")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("=" * 60 + "\n")
+        f.write("  LINEAR REGRESSION – YIELD PREDICTION METRICS\n")
+        f.write("=" * 60 + "\n\n")
+        f.write(f"  RMSE : {metrics['RMSE']:.4f} kg/ha\n")
+        f.write(f"  MAE  : {metrics['MAE']:.4f} kg/ha\n")
+        f.write(f"  R²   : {metrics['R2']:.4f}\n")
+    print(f"[Utils] Saved: {path}")
+
+
+def save_clustering_metrics(metrics, n_clusters):
+    path = os.path.join(RESULTS_DIR, "clustering_metrics.txt")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("=" * 60 + "\n")
+        f.write("  KMEANS CLUSTERING – SOIL SEGMENTATION METRICS\n")
+        f.write("=" * 60 + "\n\n")
+        f.write(f"  Number of Clusters : {n_clusters}\n")
+        f.write(f"  Silhouette Score   : {metrics['silhouette_score']:.4f}\n")
+        f.write("\n  Interpretation:\n")
+        f.write("    0.71–1.00  → Strong cluster structure\n")
+        f.write("    0.51–0.70  → Reasonable structure\n")
+        f.write("    0.26–0.50  → Weak structure\n")
+        f.write("    < 0.25    → No substantial structure\n")
+    print(f"[Utils] Saved: {path}")
